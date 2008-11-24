@@ -34,9 +34,15 @@ import xmlrpclib
 
 from optparse import OptionParser
 
+MAIL_SERVER = 'your_mail_server.com'
+MAIL_SUFFIX = '@mycompany.com'
+BUILD_HUDSON = True
+HUDSON_URL = 'http://hudson'
+TRAC_XMLRPC_URL = 'URL_TO_TRAC/projects/MYPROJECT/login/xmlrpc'
+
 def rpcProxy(user='qatracbot', password=None):
 	password = password or os.getenv('TRAC_PASS')
-	return xmlrpclib.ServerProxy('https://%s:%s@trac.slide.com/projects/Slide/login/xmlrpc' % (user, password))
+	return xmlrpclib.ServerProxy('https://%s:%s@%s' % (user, password, TRAC_XMLRPC_URL))
 
 def _send_commit_mail(user, address, subject, branch, commits, files, diff):
 	print 'Sending a GITRECEIVE mail to %s' % address
@@ -47,16 +53,16 @@ def _send_attn_mail(user, destuser, diff):
 	message = '''Good day my most generous colleague! I would hold you in the highest esteem and toast you over my finest wines if you would kindly review this for me\n\n\t - %(user)s\n\nDiff:\n------------------------------------------------\n%(diff)s''' % {'diff' : diff, 'user' : user}
 	addresses = []
 	for d in destuser.split(','):
-		addresses.append('%s@slide.com' % d)
+		addresses.append('%s%s' % (d, EMAIL_SUFFIX))
 	_send_mail(user, addresses, 'Please review this change', message)
 
 def _send_mail(user, address, subject, contents):
 	try:
 		if not isinstance(address, list):
 			address = [address]
-		s = smtplib.SMTP('smtp.slide.com')
-		message = 'From: %s@slide.com\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\n' % (user, ', '.join(address), subject, contents)
-		s.sendmail('%s@slide.com' % user, address, message)
+		s = smtplib.SMTP(MAIL_SERVER)
+		message = 'From: %s%s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s\n' % (user, MAIL_SUFFIX, ', '.join(address), subject, contents)
+		s.sendmail('%s%s' % (user, MAIL_SUFFIX), address, message)
 		s.quit()
 	except:
 		print 'Failed to send the email :('
@@ -108,17 +114,16 @@ def mail_push(address, oldrev, newrev, refname):
 	branch = refname.split('/')[-1]
 	mail_subject = 'GITRECEIVE [%s/%s] %s files changed' % (machine, branch, len(files_diffed.split('\n')))
 
-	if branch == 'master':
-		print 'Executing the Git-to-Subversion job!'
-		os.system('/usr/bin/env wget -q -O /dev/null http://hudson.corp.slide.com/job/Git-to-Subversion/build')
 	if branch == 'master-release':
 		print 'Tagging release branch'
 		tagname = 'livepush_%s' % (time.strftime('%Y%m%d%H%M%S', time.localtime()))
 		sys.stderr.write('Creating a tag named: %s\n\n' % tagname)
 		os.system('git tag %s' % tagname)
 		mail_subject = '%s (tagged: %s)' % (mail_subject, tagname)
-	print 'Queuing the Hudson job for "%s"' % branch
-	os.system('/usr/bin/env wget -q -O /dev/null http://hudson.corp.slide.com/job/%s/build' % branch)
+
+	if BUILD_HUDSON_JOB:
+			print 'Queuing the Hudson job for "%s"' % branch
+			os.system('/usr/bin/env wget -q -O /dev/null http://%s/job/%s/build' % (HUDSON_URL, branch))
 
 	_send_commit_mail(user, address, mail_subject, branch, commits, files_diffed, full_diff)
 
@@ -129,7 +134,7 @@ def mail_push(address, oldrev, newrev, refname):
 	commits.reverse()
 	for c in commits:
 		if c.find('Squashed commit') >= 0:
-			continue # Skip bullsiht squashed commit
+			continue # Skip bullshit squashed commit
 
 		for attn in find_attn(c):
 			handle_attn(branch, c, attn)
