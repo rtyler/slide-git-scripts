@@ -1,0 +1,53 @@
+          _                 _   
+    /\   | |               | |  
+   /  \  | |__   ___  _   _| |_ 
+  / /\ \ | '_ \ / _ \| | | | __|
+ / ____ \| |_) | (_) | |_| | |_ 
+/_/    \_\_.__/ \___/ \__,_|\__|
+--------------------------------
+
+These scripts are a collection of utilities we've written here at 
+Slide, Inc (http://www.slide.com) for improving our workflow with Git.
+
+Some of the scripts are in active use, while others have since been 
+deprecated (like davgit).
+
+If you have any questions about these feel free to contact the maintainer, 
+R. Tyler Ballance <tyler@slide.com>
+
+
+                             _ _       _     
+                            | | |     | |    
+ _____   ___ __  _ __  _   _| | |  ___| |__  
+/ __\ \ / / '_ \| '_ \| | | | | | / __| '_ \ 
+\__ \\ V /| | | | |_) | |_| | | |_\__ \ | | |
+|___/ \_/ |_| |_| .__/ \__,_|_|_(_)___/_| |_|
+                | |                          
+                |_|  
+---------------------------------------------
+
+The "svnpull.sh" is a script that we've used to help run a "hybrid" of 
+Git and Subversion at the same time while moving the company over to Git.
+
+At a high level, svnpull.sh is purely responsible for mashing the non-linear
+Git revision history down in a format that is digestable for Subversion. What
+this means in more technical terms is that commits in Git that are merged into 
+the "master" branch and pushed to the central repository will get propagated 
+into the "trunk" branch in Subversion by way of "squashed commits"
+
+For the reciprocal (Subversion-to-Git) we're using git-svn(1) in a relatively 
+straight-forward manner, 
+
+To tie these two ends (Subversion-to-Git, Git-to-Subversion) we're using some 
+automated jobs set up in Hudson (http://hudson.dev.java.net). The first job 
+(Subversion-to-Git) polls trunk every 5 minutes using Hudson's SCM integration,
+if there are new changes in trunk the job will execute:
+	% git-svn fetch && git merge git-svn && git push gitosis master
+
+On the other side, we're running the Git-to-Subversion job whenever a committer 
+pushes their changes up to the central Git master branch, this job executes:
+	% svnpull.sh gitosis master ; git checkout master
+
+For more details on this set up, see the following blog post:
+	http://unethicalblogger.com/posts/2008/10/git_back_subversion_mostly_automagically_part_33
+
