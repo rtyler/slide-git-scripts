@@ -48,13 +48,6 @@ def _send_commit_mail(user, address, subject, branch, commits, files, diff):
 	print 'Sending a GITRECEIVE mail to %s' % address
 	message = 'Commits pushed to %s:\n--------------------------------------\n\n%s\n--------------------------------------\n%s\n--------------------------------------\n%s' % (branch, commits, files, diff)
 	_send_mail(user, address, subject, message)
-def _send_attn_mail(user, destuser, diff):
-	print 'Sending a "please review" mail to %s' % destuser
-	message = '''Good day my most generous colleague! I would hold you in the highest esteem and toast you over my finest wines if you would kindly review this for me\n\n\t - %(user)s\n\nDiff:\n------------------------------------------------\n%(diff)s''' % {'diff' : diff, 'user' : user}
-	addresses = []
-	for d in destuser.split(','):
-		addresses.append('%s%s' % (d, EMAIL_SUFFIX))
-	_send_mail(user, addresses, 'Please review this change', message)
 
 def _send_mail(user, address, subject, contents):
 	try:
@@ -92,17 +85,6 @@ def handle_qa(branch, commit, ticket):
 		''' % {'branch' : branch, 'commit' : commit}
 	rpc = _update_ticket(ticket, message, options={'status' : 'qa'})
 
-def find_attn(commit):
-	return re.findall(r'(?i)\s+attn\s*([A-Za-z,]+)', commit)
-def handle_attn(branch, commit, attn):
-	# Unpack commit from this: "commit 5f4c31f3c31347c62d68ecb5f2c9afa3333f4ad0\nAuthor: R. Tyler Ballance <tyler@ccnet.dev.slide.com>\nDate: Wed Nov 12 16:57:32 2008 -0800 \n\n Merge commit 'git-svn' \n\n  \n \n"
-	try:
-		commit_hash = commit.split('\n')[0].split(' ')[1]
-	except:
-		return # fuk it
-	diff = os.popen('git show --no-color %s --pretty=format:"Author: %%cn <%%ce>%%n%%s%%n%%n%%b%%n%%n%%H"' % commit_hash).read().rstrip()
-	_send_attn_mail(getpass.getuser(), attn,  diff)
-
 def mail_push(address, oldrev, newrev, refname):
 	user = getpass.getuser()
 	machine = socket.gethostname()
@@ -135,9 +117,6 @@ def mail_push(address, oldrev, newrev, refname):
 	for c in commits:
 		if c.find('Squashed commit') >= 0:
 			continue # Skip bullshit squashed commit
-
-		for attn in find_attn(c):
-			handle_attn(branch, c, attn)
 
 		for ticket in find_re(c):
 			handle_re(branch, c, ticket)
