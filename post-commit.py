@@ -6,13 +6,36 @@
 
 		From: 	tyler@slide.com
 		To:		commits@slide.com
-		Subject: 	GITCOMMIT [$MACHINE/$BRANCH] Minor change (ce0520c)
+		Subject: 	GITCOMMIT [$MACHINE/$BRANCH/ce0520c] Minor change 
 
-			commit ce0520ceebb756aee7fce58f4fd643a6bca349d8
 			Author: R. Tyler Ballance <tyler@slide.com>
-			Date:   Thu Dec 4 10:37:55 2008 -0800
+			Commit: asdb123b123bfd123
+
+			Changes committed:
+				M	file
 
 				Minor change
+
+			diff --git a/file b/file
+			index bc1f44a..4468922 100644
+			--- a/file
+			+++ b/file
+			@@ -992,28 +992,5 @@ 
+
+				$DIFF
+	
+	The post-commit hook also supports sending "attention" mails with the
+	syntax of "attn tyler,jason". This will send a "[Review Request] mail
+	formatted similar to the following:
+
+		From: tyler@slide.com
+		CC: tyler@slide.com, jason@slide.com
+		Subject: [Review Request] Minor change
+
+			(commit body here)
+			--
+			file |    6 ++++--
+			1 files changed, 4 insertions(+), 2 deletions(-)
 
 			diff --git a/file b/file
 			index bc1f44a..4468922 100644
@@ -34,21 +57,35 @@ from optparse import OptionParser
 SMTP_SERVER = 'smtp.your.com'
 MAIL_SUFFIX = '@your.com'
 
+def find_attn(commit):
+	rc = re.findall(r'(?:^|\s)attn[:\s]+([\w \t,-]+[\w,])', commit)
+	if not rc:
+		return []
+	if len(rc) > 1:
+		return rc
+	return rc[0].split(',')
+
 def mail_commit(address):
 	user = os.getenv('PG_USER') or getpass.getuser()
 	machine = socket.gethostname()
-	base_git_cmd = 'git log --max-count=1 --no-color --no-merges --author=%s' % (user)
-	branch = os.popen('git branch --no-color | grep "* " | sed \'s/* //g\'').read().rstrip()
-	commit_diff = os.popen('%s --unified=4 --pretty=medium' % base_git_cmd).read().rstrip()
-	mail_subject = os.popen('%s --pretty=format:"%%s (%%h)"'  % (base_git_cmd)).read().rstrip()
-	mail_subject = 'GITCOMMIT [%s/%s] %s' % (machine, branch, mail_subject)
-
+	branch = os.popen('git symbolic-ref HEAD').read().rstrip()
+	branch = branch.replace('refs/heads/', '')
+	changes = os.popen('git diff HEAD^...HEAD --name-status --no-color').read().rstrip()
+	message = os.popen('git show HEAD --pretty=format:"From: %(user)s@slide.com\r\nTo: %(to)s\r\nSubject: GITCOMMIT [%(hostname)s/%(branch)s/%%h] %%s\r\n\r\nAuthor: %%aN <%%ae>\r\nCommit: %%H\r\n\r\nChanges committed:\r\n\t%(changes)s\r\n\r\n%%s\r\n\r\n%%b\r\n\r\n" --no-color' % {
+					'user' : user, 'to' : address, 'branch' : branch, 'hostname' : machine, 'changes' : '\n\t'.join(changes.split('\n'))}).read().rstrip()
 	print 'Sending a commit mail to %s' % (address)
 
 	s = smtplib.SMTP(SMTP_SERVER)
-	sender = os.getenv('GIT_FROM') or ('%s%s' % (user, MAIL_SUFFIX))
-	message = 'From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s' % (sender, address, mail_subject, commit_diff)
-	s.sendmail('%s%s' % (user, MAIL_SUFFIX), [address], message)
+	addresses = [address]
+	s.sendmail('%s@%s' % (user, MAIL_SUFFIX), addresses, message)
+
+	addresses = find_attn(message)
+	if addresses:
+		addresses.append(user)
+		addresses = ['%s@%s' % (a.strip(), MAIL_SUFFIX) for a in addresses]
+		print 'Sending a review mail to: %s' % ','.join(addresses)
+		message = os.popen('git format-patch --stdout HEAD^ --subject-prefix="Review Request" --cc=%s' % ','.join(addresses)).read().rstrip()
+		s.sendmail('%s@%s' % (user, MAIL_SUFFIX) , addresses, message)
 	s.quit()
 
 if __name__ == '__main__':
